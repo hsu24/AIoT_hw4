@@ -82,6 +82,35 @@ def draw_ui(frame, result_text, roi_box):
     return frame
 
 
+def open_camera():
+    """嘗試多種方式開啟攝影機（解決 Windows 上無法以 index 開啟的問題）"""
+    # 依序嘗試的 (index, backend) 組合
+    attempts = []
+    for idx in range(5):
+        attempts.append((idx, cv2.CAP_DSHOW))   # DirectShow (Windows 最穩定)
+    for idx in range(5):
+        attempts.append((idx, cv2.CAP_MSMF))    # Media Foundation
+    for idx in range(5):
+        attempts.append((idx, cv2.CAP_ANY))      # 自動選擇
+
+    for idx, backend in attempts:
+        backend_name = {cv2.CAP_DSHOW: 'DSHOW', cv2.CAP_MSMF: 'MSMF', cv2.CAP_ANY: 'ANY'}.get(backend, str(backend))
+        print(f"  嘗試 index={idx}, backend={backend_name} ...", end=" ")
+        cap = cv2.VideoCapture(idx, backend)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                print("✅ 成功！")
+                return cap
+            else:
+                cap.release()
+                print("❌ 可開啟但無法讀取畫面")
+        else:
+            print("❌ 無法開啟")
+
+    return None
+
+
 def main():
     # 載入模型
     clf = load_model()
@@ -89,9 +118,11 @@ def main():
         return
 
     # 開啟攝影機
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("❌ 錯誤：無法開啟攝影機，請確認攝影機是否連接。")
+    print("🔍 正在搜尋可用的攝影機...")
+    cap = open_camera()
+    if cap is None:
+        print("❌ 錯誤：無法開啟任何攝影機，請確認攝影機是否連接。")
+        print("   提示：可嘗試在「裝置管理員」中確認攝影機驅動是否正常。")
         return
 
     print("\n🎮 剪刀石頭布辨識系統啟動！")
