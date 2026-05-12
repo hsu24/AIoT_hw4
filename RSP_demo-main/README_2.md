@@ -3,8 +3,15 @@
 ## 環境安裝
 
 ```bash
+# 建立虛擬環境（Raspberry Pi OS Bookworm 必須使用）
+python3 -m venv venv
+source venv/bin/activate
+
+# 安裝所需套件
 pip install -r demo/requirements.txt
 ```
+
+> ⚠️ 若不想建虛擬環境，也可以用 `pip install --break-system-packages -r demo/requirements.txt` 強制安裝。
 
 ---
 

@@ -1,11 +1,14 @@
 """
-剪刀石頭布即時辨識程式（YOLO + SVM 雙模型支援）
-優先使用 YOLOv8 分類模型推論，若找不到 YOLO 模型則退回 SVM。
+剪刀石頭布即時辨識程式（ONNX + SVM 雙模型支援）
+優先使用 YOLOv8 ONNX 模型推論（不需要 ultralytics），
+若找不到 ONNX 模型則退回 SVM。
 透過攝影機即時辨識手勢為剪刀、石頭或布。
 
 操作方式：
   - 按下 空白鍵 擷取畫面並進行辨識
   - 按下 q 鍵離開程式
+
+所需套件：pip install onnxruntime opencv-python numpy joblib scikit-learn
 """
 
 import os
@@ -14,29 +17,53 @@ import numpy as np
 import joblib
 
 
+# YOLO 分類模型的類別名稱（與訓練時的資料夾順序一致）
+CLASS_NAMES = {0: 'paper', 1: 'rock', 2: 'scissors'}
+
+
+# ============================================================
+# ONNX 推論工具
+# ============================================================
+
+def softmax(x):
+    """計算 softmax 機率"""
+    e = np.exp(x - np.max(x))
+    return e / e.sum()
+
+
+def preprocess_onnx(frame, imgsz=224):
+    """將影像前處理為 ONNX 模型輸入格式 (1, 3, 224, 224)"""
+    resized = cv2.resize(frame, (imgsz, imgsz))
+    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    normalized = rgb.astype(np.float32) / 255.0
+    chw = np.transpose(normalized, (2, 0, 1))
+    return np.expand_dims(chw, axis=0)
+
+
 # ============================================================
 # 模型載入
 # ============================================================
 
-def load_yolo_model():
-    """嘗試載入 YOLOv8 分類模型"""
+def load_yolo_onnx():
+    """嘗試載入 YOLO ONNX 模型"""
     try:
-        from ultralytics import YOLO
+        import onnxruntime as ort
     except ImportError:
-        print("  ⚠️ ultralytics 套件未安裝，無法使用 YOLO 模型")
+        print("  ⚠️ onnxruntime 未安裝，無法使用 YOLO 模型")
+        print("     安裝方式：pip install onnxruntime")
         return None
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(script_dir, 'rps_yolo_model.pt')
+    model_path = os.path.join(script_dir, 'rps_yolo_model.onnx')
 
     if not os.path.exists(model_path):
-        print(f"  ⚠️ 找不到 YOLO 模型檔案 '{model_path}'")
+        print(f"  ⚠️ 找不到 ONNX 模型檔案 '{model_path}'")
         return None
 
-    print("⏳ 載入 YOLO 模型中...")
-    model = YOLO(model_path)
-    print("✅ YOLO 模型載入成功！")
-    return model
+    print("⏳ 載入 YOLO ONNX 模型中...")
+    session = ort.InferenceSession(model_path)
+    print("✅ YOLO ONNX 模型載入成功！")
+    return session
 
 
 def load_svm_model(model_path='rps_svm_model.pkl'):
@@ -56,13 +83,13 @@ def load_svm_model(model_path='rps_svm_model.pkl'):
 
 
 def load_model():
-    """優先載入 YOLO 模型，若失敗則退回 SVM"""
+    """優先載入 YOLO ONNX 模型，若失敗則退回 SVM"""
     print("🔎 正在尋找可用模型...")
 
-    # 優先嘗試 YOLO
-    yolo_model = load_yolo_model()
-    if yolo_model is not None:
-        return ('yolo', yolo_model)
+    # 優先嘗試 YOLO ONNX
+    onnx_session = load_yolo_onnx()
+    if onnx_session is not None:
+        return ('yolo', onnx_session)
 
     # 退回 SVM
     print("  → 嘗試載入 SVM 模型作為備援...")
@@ -78,19 +105,19 @@ def load_model():
 # 推論
 # ============================================================
 
-def predict_yolo(model, roi_frame):
-    """使用 YOLO 分類模型預測手勢"""
+def predict_yolo(session, roi_frame):
+    """使用 YOLO ONNX 模型預測手勢"""
     emoji_map = {'rock': '🪨 Rock 石頭', 'paper': '📄 Paper 布', 'scissors': '✂️ Scissors 剪刀'}
 
-    results = model(roi_frame, verbose=False)
-    if results and len(results) > 0:
-        result = results[0]
-        pred_idx = result.probs.top1
-        pred_name = model.names[pred_idx]
-        confidence = result.probs.top1conf.item()
-        display_name = emoji_map.get(pred_name, pred_name)
-        return f"{display_name} ({confidence * 100:.1f}%)"
-    return "辨識失敗"
+    input_tensor = preprocess_onnx(roi_frame)
+    input_name = session.get_inputs()[0].name
+    output = session.run(None, {input_name: input_tensor})[0][0]
+    probs = softmax(output)
+    pred_idx = int(np.argmax(probs))
+    confidence = float(probs[pred_idx])
+    pred_name = CLASS_NAMES.get(pred_idx, str(pred_idx))
+    display_name = emoji_map.get(pred_name, pred_name)
+    return f"{display_name} ({confidence * 100:.1f}%)"
 
 
 def predict_svm(clf, roi_frame):

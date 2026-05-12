@@ -1,47 +1,87 @@
 """
-YOLOv8 分類模型測試腳本
-在測試集上評估 YOLO 模型的準確度，並與 SVM 做比較
+YOLOv8 分類模型測試腳本（ONNX Runtime 版本，不需要 ultralytics）
+在測試集上評估 YOLO 模型的準確度
 
 使用方式：
   cd RSP_demo-main/demo
   python test_yolo.py
+
+所需套件：pip install onnxruntime opencv-python numpy
 """
 
 import os
+import sys
 import cv2
 import numpy as np
-from ultralytics import YOLO
 from collections import defaultdict
+
+try:
+    import onnxruntime as ort
+except ImportError:
+    print("❌ 錯誤：onnxruntime 套件未安裝。")
+    print("   請執行以下指令安裝：")
+    print("   pip install onnxruntime")
+    sys.exit(1)
+
+
+# YOLO 分類模型的類別名稱（與訓練時的資料夾順序一致）
+CLASS_NAMES = {0: 'paper', 1: 'rock', 2: 'scissors'}
+
+
+def preprocess(img, imgsz=224):
+    """將圖片前處理為 ONNX 模型輸入格式 (1, 3, 224, 224)"""
+    # 縮放
+    resized = cv2.resize(img, (imgsz, imgsz))
+    # BGR → RGB
+    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    # 正規化 [0, 255] → [0.0, 1.0]
+    normalized = rgb.astype(np.float32) / 255.0
+    # HWC → CHW
+    chw = np.transpose(normalized, (2, 0, 1))
+    # 加 batch 維度 → (1, 3, 224, 224)
+    return np.expand_dims(chw, axis=0)
+
+
+def softmax(x):
+    """計算 softmax 機率"""
+    e = np.exp(x - np.max(x))
+    return e / e.sum()
+
+
+def predict(session, img):
+    """使用 ONNX 模型推論，回傳 (類別名稱, 信心分數)"""
+    input_tensor = preprocess(img)
+    input_name = session.get_inputs()[0].name
+    output = session.run(None, {input_name: input_tensor})[0][0]
+    probs = softmax(output)
+    pred_idx = int(np.argmax(probs))
+    confidence = float(probs[pred_idx])
+    return CLASS_NAMES.get(pred_idx, str(pred_idx)), confidence
 
 
 def main():
     # 設定路徑
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.dirname(script_dir)
-    model_path = os.path.join(script_dir, 'rps_yolo_model.pt')
+    model_path = os.path.join(script_dir, 'rps_yolo_model.onnx')
     test_dir = os.path.join(base_dir, 'dataset', 'test')
 
     # 檢查模型
     if not os.path.exists(model_path):
-        print(f"❌ 錯誤：找不到 YOLO 模型 '{model_path}'")
-        print("   請先執行 train/train_yolo.py 訓練模型。")
+        print(f"❌ 錯誤：找不到 ONNX 模型 '{model_path}'")
+        print("   請先執行 train/train_yolo.py 訓練並匯出模型。")
         return
 
     if not os.path.exists(test_dir):
         print(f"❌ 錯誤：找不到測試資料集 '{test_dir}'")
         return
 
-    # 載入模型
-    print("⏳ 載入 YOLO 模型中...")
-    model = YOLO(model_path)
-    print("✅ 模型載入成功！\n")
-
-    # 取得模型的類別名稱
-    class_names = model.names  # {0: 'paper', 1: 'rock', 2: 'scissors'} 等
-    print(f"📋 模型類別: {class_names}\n")
-
-    # 定義本地測試資料夾的類別對應
-    label_map = {'rock': 'rock', 'paper': 'paper', 'scissors': 'scissors'}
+    # 載入 ONNX 模型
+    print("⏳ 載入 ONNX 模型中...")
+    session = ort.InferenceSession(model_path)
+    print("✅ 模型載入成功！")
+    print(f"   模型: {os.path.basename(model_path)}")
+    print(f"   類別: {CLASS_NAMES}\n")
 
     # 統計
     total = 0
@@ -55,7 +95,6 @@ def main():
         category_path = os.path.join(test_dir, category)
 
         if not os.path.exists(category_path):
-            # 嘗試子資料夾
             subdirs = [d for d in os.listdir(test_dir)
                        if os.path.isdir(os.path.join(test_dir, d))]
             if subdirs:
@@ -70,25 +109,23 @@ def main():
                 continue
 
             img_path = os.path.join(category_path, filename)
-            results = model(img_path, verbose=False)
+            img = cv2.imread(img_path)
+            if img is None:
+                continue
 
-            if results and len(results) > 0:
-                result = results[0]
-                pred_class_idx = result.probs.top1
-                pred_class_name = class_names[pred_class_idx]
-                confidence = result.probs.top1conf.item()
+            pred_name, confidence = predict(session, img)
 
-                total += 1
-                per_class_total[category] += 1
-                confusion[category][pred_class_name] += 1
+            total += 1
+            per_class_total[category] += 1
+            confusion[category][pred_name] += 1
 
-                if pred_class_name == category:
-                    correct += 1
-                    per_class_correct[category] += 1
+            if pred_name == category:
+                correct += 1
+                per_class_correct[category] += 1
 
     # ========== 結果報告 ==========
     print("\n" + "=" * 55)
-    print("📊 YOLO 模型測試結果")
+    print("📊 YOLO 模型測試結果（ONNX Runtime）")
     print("=" * 55)
 
     if total > 0:
