@@ -1,6 +1,6 @@
 """
-剪刀石頭布即時辨識程式
-結合 test.py（SVM 模型推論）與 carema.py（攝影機擷取），
+剪刀石頭布即時辨識程式（YOLO + SVM 雙模型支援）
+優先使用 YOLOv8 分類模型推論，若找不到 YOLO 模型則退回 SVM。
 透過攝影機即時辨識手勢為剪刀、石頭或布。
 
 操作方式：
@@ -14,47 +14,110 @@ import numpy as np
 import joblib
 
 
-def load_model(model_path='rps_svm_model.pkl'):
-    """載入已訓練好的 SVM 模型"""
-    # 嘗試在同目錄下找模型
+# ============================================================
+# 模型載入
+# ============================================================
+
+def load_yolo_model():
+    """嘗試載入 YOLOv8 分類模型"""
+    try:
+        from ultralytics import YOLO
+    except ImportError:
+        print("  ⚠️ ultralytics 套件未安裝，無法使用 YOLO 模型")
+        return None
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(script_dir, 'rps_yolo_model.pt')
+
     if not os.path.exists(model_path):
-        # 嘗試用腳本所在位置尋找
+        print(f"  ⚠️ 找不到 YOLO 模型檔案 '{model_path}'")
+        return None
+
+    print("⏳ 載入 YOLO 模型中...")
+    model = YOLO(model_path)
+    print("✅ YOLO 模型載入成功！")
+    return model
+
+
+def load_svm_model(model_path='rps_svm_model.pkl'):
+    """載入已訓練好的 SVM 模型（備援）"""
+    if not os.path.exists(model_path):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(script_dir, 'rps_svm_model.pkl')
 
     if not os.path.exists(model_path):
-        print(f"❌ 錯誤：找不到模型檔案 '{model_path}'，請確認是否已放入 demo 資料夾。")
+        print(f"  ⚠️ 找不到 SVM 模型檔案 '{model_path}'")
         return None
 
-    print("⏳ 載入模型中...")
+    print("⏳ 載入 SVM 模型中...")
     clf = joblib.load(model_path)
-    print("✅ 模型載入成功！")
+    print("✅ SVM 模型載入成功！")
     return clf
 
 
-def preprocess_frame(frame):
-    """
-    將攝影機擷取的畫面進行前處理（與訓練時一致）
-    1. 轉灰階
-    2. 縮放至 64x64
-    3. 攤平為一維陣列
-    4. 正規化 (除以 255)
-    """
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    resized = cv2.resize(gray, (64, 64))
-    flattened = resized.flatten()
-    normalized = flattened / 255.0
-    return normalized.reshape(1, -1)
+def load_model():
+    """優先載入 YOLO 模型，若失敗則退回 SVM"""
+    print("🔎 正在尋找可用模型...")
+
+    # 優先嘗試 YOLO
+    yolo_model = load_yolo_model()
+    if yolo_model is not None:
+        return ('yolo', yolo_model)
+
+    # 退回 SVM
+    print("  → 嘗試載入 SVM 模型作為備援...")
+    svm_model = load_svm_model()
+    if svm_model is not None:
+        return ('svm', svm_model)
+
+    print("❌ 錯誤：找不到任何可用模型，請先訓練模型。")
+    return None
 
 
-def predict_gesture(clf, processed_frame):
+# ============================================================
+# 推論
+# ============================================================
+
+def predict_yolo(model, roi_frame):
+    """使用 YOLO 分類模型預測手勢"""
+    emoji_map = {'rock': '🪨 Rock 石頭', 'paper': '📄 Paper 布', 'scissors': '✂️ Scissors 剪刀'}
+
+    results = model(roi_frame, verbose=False)
+    if results and len(results) > 0:
+        result = results[0]
+        pred_idx = result.probs.top1
+        pred_name = model.names[pred_idx]
+        confidence = result.probs.top1conf.item()
+        display_name = emoji_map.get(pred_name, pred_name)
+        return f"{display_name} ({confidence * 100:.1f}%)"
+    return "辨識失敗"
+
+
+def predict_svm(clf, roi_frame):
     """使用 SVM 模型預測手勢"""
     label_map = {0: 'Rock 🪨 石頭', 1: 'Paper 📄 布', 2: 'Scissors ✂️ 剪刀'}
-    prediction = clf.predict(processed_frame)[0]
+    gray = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, (64, 64))
+    flattened = resized.flatten() / 255.0
+    processed = flattened.reshape(1, -1)
+    prediction = clf.predict(processed)[0]
     return label_map.get(prediction, '未知')
 
 
-def draw_ui(frame, result_text, roi_box):
+def predict_gesture(model_info, roi_frame):
+    """根據模型類型分發推論"""
+    model_type, model = model_info
+    if model_type == 'yolo':
+        return predict_yolo(model, roi_frame)
+    else:
+        return predict_svm(model, roi_frame)
+
+
+# ============================================================
+# UI 繪製
+# ============================================================
+
+def draw_ui(frame, result_text, roi_box, model_type='yolo'):
     """在畫面上繪製介面元素"""
     h, w = frame.shape[:2]
     x1, y1, x2, y2 = roi_box
@@ -68,19 +131,28 @@ def draw_ui(frame, result_text, roi_box):
 
     # 底部半透明黑色背景
     overlay = frame.copy()
-    cv2.rectangle(overlay, (0, h - 100), (w, h), (0, 0, 0), -1)
+    cv2.rectangle(overlay, (0, h - 120), (w, h), (0, 0, 0), -1)
     cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
 
+    # 模型類型標籤
+    model_label = f"Model: {model_type.upper()}"
+    cv2.putText(frame, model_label, (10, h - 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 255, 100), 1)
+
     # 辨識結果文字
-    cv2.putText(frame, f"Result: {result_text}", (10, h - 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
+    cv2.putText(frame, f"Result: {result_text}", (10, h - 55),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)
 
     # 操作說明
-    cv2.putText(frame, "[SPACE] Capture  |  [Q] Quit", (10, h - 20),
+    cv2.putText(frame, "[SPACE] Capture  |  [Q] Quit", (10, h - 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
 
     return frame
 
+
+# ============================================================
+# 攝影機開啟
+# ============================================================
 
 def open_camera():
     """嘗試多種方式開啟攝影機（解決 Windows 上無法以 index 開啟的問題）"""
@@ -111,21 +183,27 @@ def open_camera():
     return None
 
 
+# ============================================================
+# 主程式
+# ============================================================
+
 def main():
     # 載入模型
-    clf = load_model()
-    if clf is None:
+    model_info = load_model()
+    if model_info is None:
         return
 
+    model_type, model = model_info
+
     # 開啟攝影機
-    print("🔍 正在搜尋可用的攝影機...")
+    print("\n🔍 正在搜尋可用的攝影機...")
     cap = open_camera()
     if cap is None:
         print("❌ 錯誤：無法開啟任何攝影機，請確認攝影機是否連接。")
         print("   提示：可嘗試在「裝置管理員」中確認攝影機驅動是否正常。")
         return
 
-    print("\n🎮 剪刀石頭布辨識系統啟動！")
+    print(f"\n🎮 剪刀石頭布辨識系統啟動！（使用 {model_type.upper()} 模型）")
     print("   按 [空白鍵] 擷取畫面並辨識")
     print("   按 [Q] 鍵離開程式\n")
 
@@ -151,7 +229,7 @@ def main():
         roi_box = (roi_x1, roi_y1, roi_x2, roi_y2)
 
         # 繪製 UI
-        display_frame = draw_ui(frame.copy(), result_text, roi_box)
+        display_frame = draw_ui(frame.copy(), result_text, roi_box, model_type)
         cv2.imshow("Rock Paper Scissors - RSP Detector", display_frame)
 
         key = cv2.waitKey(1) & 0xFF
@@ -162,8 +240,7 @@ def main():
         elif key == ord(' '):
             # 擷取 ROI 區域進行辨識
             roi = frame[roi_y1:roi_y2, roi_x1:roi_x2]
-            processed = preprocess_frame(roi)
-            result_text = predict_gesture(clf, processed)
+            result_text = predict_gesture(model_info, roi)
             print(f"🔍 辨識結果: {result_text}")
 
     cap.release()

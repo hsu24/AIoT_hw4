@@ -25,3 +25,23 @@
   - 每次嘗試不僅檢查 `isOpened()`，還會實際讀取一幀確認攝影機可用
   - Console 輸出每次嘗試的結果，方便除錯
   - 若全部失敗，提示使用者檢查裝置管理員中的攝影機驅動
+
+## 2026-05-12 11:08 — 訓練 YOLOv8 分類模型提升準確度
+- **使用者需求**：新訓練一個 YOLO 模型取代 SVM，提升剪刀石頭布辨識準確度。
+- **確認事項**：無 GPU，使用最輕量 `yolov8n-cls` 模型。
+- **資料集**：train 2520 張 / test 372 張 / validation 33 張（已重新整理成 YOLO 分類格式）
+- **新增/修改檔案**：
+  1. **`train/train_yolo.py`** [NEW]：YOLO 分類模型訓練腳本
+     - 自動整理 `validation/` 為 YOLO 格式的 `val/{class}/` 子資料夾
+     - 使用預訓練 `yolov8n-cls.pt`，epochs=50, imgsz=224, batch=32, CPU 訓練
+     - 訓練後自動複製最佳模型到 `demo/rps_yolo_model.pt`
+  2. **`demo/test_yolo.py`** [NEW]：YOLO 測試腳本，含逐類別準確率與混淆矩陣
+  3. **`demo/rps_camera.py`** [MODIFIED]：支援 YOLO + SVM 雙模型
+     - 優先載入 YOLO 模型，找不到則退回 SVM
+     - YOLO 推論附帶信心分數顯示在 UI
+     - 模型類型標籤顯示在畫面底部
+  4. **`requirements.txt`** [MODIFIED]：新增 `ultralytics`, `torch`, `torchvision`
+- **訓練結果**：
+  - 🎯 測試集 Top-1 準確率：**94.89%**
+  - 🎯 測試集 Top-5 準確率：**100.00%**
+  - 模型大小：**2.8 MB**（vs SVM 的 27 MB）

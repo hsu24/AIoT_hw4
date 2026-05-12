@@ -3,3 +3,6 @@ opencv-python
 numpy
 joblib
 mediapipe
+ultralytics
+torch
+torchvision
