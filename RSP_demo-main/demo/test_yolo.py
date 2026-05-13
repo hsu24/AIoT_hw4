@@ -68,20 +68,20 @@ def main():
 
     # 檢查模型
     if not os.path.exists(model_path):
-        print(f"❌ 錯誤：找不到 ONNX 模型 '{model_path}'")
+        print("❌ 錯誤：找不到 ONNX 模型 '{}'".format(model_path))
         print("   請先執行 train/train_yolo.py 訓練並匯出模型。")
         return
 
     if not os.path.exists(test_dir):
-        print(f"❌ 錯誤：找不到測試資料集 '{test_dir}'")
+        print("❌ 錯誤：找不到測試資料集 '{}'".format(test_dir))
         return
 
     # 載入 ONNX 模型
     print("⏳ 載入 ONNX 模型中...")
     session = ort.InferenceSession(model_path)
     print("✅ 模型載入成功！")
-    print(f"   模型: {os.path.basename(model_path)}")
-    print(f"   類別: {CLASS_NAMES}\n")
+    print("   模型: {}".format(os.path.basename(model_path)))
+    print("   類別: {}\n".format(CLASS_NAMES))
 
     # 統計
     total = 0
@@ -101,7 +101,7 @@ def main():
                 category_path = os.path.join(test_dir, subdirs[0], category)
 
         if not os.path.exists(category_path):
-            print(f"  ⚠️ 找不到 {category} 的資料夾，略過...")
+            print("  ⚠️ 找不到 {} 的資料夾，略過...".format(category))
             continue
 
         for filename in os.listdir(category_path):
@@ -130,28 +130,27 @@ def main():
 
     if total > 0:
         accuracy = correct / total * 100
-        print(f"\n🎯 整體準確率: {accuracy:.2f}% ({correct}/{total})\n")
+        print("\n🎯 整體準確率: {:.2f}% ({}/{})\n".format(accuracy, correct, total))
 
         # 各類別準確率
-        print(f"{'類別':<12} {'準確率':>8} {'正確/總數':>12}")
+        print("{:<12} {:>8} {:>12}".format('類別', '準確率', '正確/總數'))
         print("-" * 35)
         for cat in ['rock', 'paper', 'scissors']:
             cat_total = per_class_total[cat]
             cat_correct = per_class_correct[cat]
             cat_acc = cat_correct / cat_total * 100 if cat_total > 0 else 0
-            emoji = {'rock': '🪨', 'paper': '📄', 'scissors': '✂️'}[cat]
-            print(f"{emoji} {cat:<8} {cat_acc:>7.2f}% {cat_correct:>5}/{cat_total:<5}")
+            print("{:<12} {:>7.2f}% {:>5}/{:<5}".format(cat, cat_acc, cat_correct, cat_total))
 
         # 混淆矩陣
-        print(f"\n📋 混淆矩陣 (列=真實, 欄=預測)")
+        print("\n📋 混淆矩陣 (列=真實, 欄=預測)")
         cats = ['rock', 'paper', 'scissors']
-        header = f"{'':>12}" + "".join(f"{c:>10}" for c in cats)
+        header = "{:>12}".format('') + "".join("{:>10}".format(c) for c in cats)
         print(header)
         print("-" * (12 + 10 * len(cats)))
         for true_cat in cats:
-            row = f"{true_cat:>12}"
+            row = "{:>12}".format(true_cat)
             for pred_cat in cats:
-                row += f"{confusion[true_cat][pred_cat]:>10}"
+                row += "{:>10}".format(confusion[true_cat][pred_cat])
             print(row)
     else:
         print("❌ 沒有成功測試任何圖片。")
