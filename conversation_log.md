@@ -61,3 +61,7 @@
 - **使用者需求**：將所有檔案 push 到 `https://github.com/hsu24/AIoT_hw4.git`。
 - **執行狀況**：系統偵測到環境中未安裝 Git 或未將 Git 加入環境變數，因此無法自動執行推送。
 - **後續建議**：已提供手動上傳或安裝 Git 的指令說明給使用者參考。
+
+## 2026-05-13 11:02 — 再次嘗試推送至 GitHub
+- **使用者需求**：使用者已安裝好 Git，要求再次嘗試推送到 `https://github.com/hsu24/AIoT_hw4.git`。
+- **執行狀況**：已設定暫時的 commit 名稱並嘗試執行 `git pull --allow-unrelated-histories` 及 `git push` 指令，目前正在等待使用者完成 GitHub 的授權登入（Credential Manager 彈出視窗）。
