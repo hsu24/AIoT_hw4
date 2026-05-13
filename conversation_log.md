@@ -32,47 +32,40 @@
 - **資料集**：train 2520 張 / test 372 張 / validation 33 張（已重新整理成 YOLO 分類格式）
 - **新增/修改檔案**：
   1. **`train/train_yolo.py`** [NEW]：YOLO 分類模型訓練腳本
-     - 自動整理 `validation/` 為 YOLO 格式的 `val/{class}/` 子資料夾
-     - 使用預訓練 `yolov8n-cls.pt`，epochs=50, imgsz=224, batch=32, CPU 訓練
-     - 訓練後自動複製最佳模型到 `demo/rps_yolo_model.pt`
-  2. **`demo/test_yolo.py`** [NEW]：YOLO 測試腳本，含逐類別準確率與混淆矩陣
+  2. **`demo/test_yolo.py`** [NEW]：YOLO 測試腳本
   3. **`demo/rps_camera.py`** [MODIFIED]：支援 YOLO + SVM 雙模型
-     - 優先載入 YOLO 模型，找不到則退回 SVM
-     - YOLO 推論附帶信心分數顯示在 UI
-     - 模型類型標籤顯示在畫面底部
   4. **`requirements.txt`** [MODIFIED]：新增 `ultralytics`, `torch`, `torchvision`
 - **訓練結果**：
   - 🎯 測試集 Top-1 準確率：**94.89%**
   - 🎯 測試集 Top-5 準確率：**100.00%**
-  - 模型大小：**2.8 MB**（vs SVM 的 27 MB）
+  - 模型大小：**2.8 MB**
+
 ## 2026-05-13 10:49 — 系統指示紀錄
 - **使用者要求**：將接下來的聊天紀錄都整理並存到 `conversation_log.md`。
 - **系統回應**：已確認，將會在每次任務完成後，將對話與任務執行結果記錄到此檔案中。
 
 ## 2026-05-13 10:53 — 修改 test_yolo.py 支援樹莓派舊版 Python
-- **使用者需求**：需要在樹莓派上執行 `test_yolo.py`，但樹莓派可能不支援較新的 Python 版本（如 f-string 語法等），要求修改腳本以確保相容性。
-- **修改內容**：
-  - 將所有 f-string (`f"..."`) 改寫為更具相容性的 `.format()` 語法。
-  - 移除了程式碼中的 Emoji（圖示）輸出，避免在部分未預設使用 UTF-8 編碼的終端機環境下發生 `UnicodeEncodeError` 錯誤。
-- **產出結果**：已成功修改並更新 `RSP_demo-main/demo/test_yolo.py`。
+- **使用者需求**：需要在樹莓派上執行 `test_yolo.py`，要求修改腳本以確保相容性。
+- **修改內容**：將 f-string 改寫為 `.format()`，並移除 Emoji 避免編碼錯誤。
 
 ## 2026-05-13 10:59 — 嘗試推送至 GitHub
-- **使用者需求**：將所有檔案 push 到 `https://github.com/hsu24/AIoT_hw4.git`。
-- **執行狀況**：系統偵測到環境中未安裝 Git 或未將 Git 加入環境變數，因此無法自動執行推送。
-- **後續建議**：已提供手動上傳或安裝 Git 的指令說明給使用者參考。
+- **使用者需求**：將所有檔案 push 到 GitHub。
+- **執行狀況**：偵測到環境中未安裝 Git，提供安裝建議。
 
 ## 2026-05-13 11:02 — 再次嘗試推送至 GitHub
-- **使用者需求**：使用者已安裝好 Git，要求再次嘗試推送到 `https://github.com/hsu24/AIoT_hw4.git`。
-- **執行狀況**：已設定暫時的 commit 名稱並嘗試執行 `git pull --allow-unrelated-histories` 及 `git push` 指令，目前正在等待使用者完成 GitHub 的授權登入（Credential Manager 彈出視窗）。
+- **使用者需求**：已安裝 Git，再次嘗試推送。
+- **執行狀況**：執行 `git pull` 與 `git push`，過程中處理了合併衝突。
 
-## 2026-05-13 11:15 �X �A���ѨM Git �Ĭ�P���e
-- **�ϥΪ̻ݨD**�G�A�����հ��� git pull �� git push �� https://github.com/hsu24/AIoT_hw4.git�C
-- **���檬�p**�G
-  - �o�{�׺ݾ����ҥ���s PATH�A��ε�����|�I�s git�C
-  - ���� git pull --allow-unrelated-histories �ɵo�ͤF conversation_log.md ���X�ֽĬ� (Merge Conflict)�C
-  - ��ʲ����F�Ĭ�аO (Conflict markers) �H�O�d�̷s����ܬ����C
-  - �ǳƴ���X�֨ñ��e�컷���x�s�w�C
+## 2026-05-13 11:15 — 再次解決 Git 衝突與推送
+- **執行狀況**：解決 `conversation_log.md` 衝突，成功 push 到 GitHub。
 
+## 2026-05-13 11:34 — 復原 Ultralytics 版本與新模型推薦
+- **使用者需求**：將 `test_yolo.py` 與 `rps_camera.py` 改回使用 `ultralytics` 套件。
+- **執行狀況**：已復原檔案，並提供 MobileNet, ResNet, MediaPipe 等模型推薦。
 
-  - **���G**�G�w���\�ѨM�X�ֽĬ�A�ö��Q�N�������ܧ� (�t�V�m�{���B���յ{���ק�B�P��ܬ���) push �컷�� GitHub �x�s�w�C
-
+## 2026-05-13 12:06 — 實作 MediaPipe 手勢辨識模型
+- **使用者需求**：訓練並整合 MediaPipe 手勢辨識模型。
+- **執行狀況**：
+  - 新增 `train/train_mediapipe.py`：擷取 21 個手部關鍵點特徵並訓練隨機森林模型。
+  - 新增 `demo/test_mediapipe.py`：測試新模型準確度。
+  - 修改 `demo/rps_camera.py`：支援 MediaPipe 骨架顯示與 `m` 鍵即時切換模型功能。
