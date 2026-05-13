@@ -45,7 +45,6 @@
   - 🎯 測試集 Top-1 準確率：**94.89%**
   - 🎯 測試集 Top-5 準確率：**100.00%**
   - 模型大小：**2.8 MB**（vs SVM 的 27 MB）
-
 ## 2026-05-13 10:49 — 系統指示紀錄
 - **使用者要求**：將接下來的聊天紀錄都整理並存到 `conversation_log.md`。
 - **系統回應**：已確認，將會在每次任務完成後，將對話與任務執行結果記錄到此檔案中。
@@ -65,3 +64,12 @@
 ## 2026-05-13 11:02 — 再次嘗試推送至 GitHub
 - **使用者需求**：使用者已安裝好 Git，要求再次嘗試推送到 `https://github.com/hsu24/AIoT_hw4.git`。
 - **執行狀況**：已設定暫時的 commit 名稱並嘗試執行 `git pull --allow-unrelated-histories` 及 `git push` 指令，目前正在等待使用者完成 GitHub 的授權登入（Credential Manager 彈出視窗）。
+
+## 2026-05-13 11:15 �X �A���ѨM Git �Ĭ�P���e
+- **�ϥΪ̻ݨD**�G�A�����հ��� git pull �� git push �� https://github.com/hsu24/AIoT_hw4.git�C
+- **���檬�p**�G
+  - �o�{�׺ݾ����ҥ���s PATH�A��ε�����|�I�s git�C
+  - ���� git pull --allow-unrelated-histories �ɵo�ͤF conversation_log.md ���X�ֽĬ� (Merge Conflict)�C
+  - ��ʲ����F�Ĭ�аO (Conflict markers) �H�O�d�̷s����ܬ����C
+  - �ǳƴ���X�֨ñ��e�컷���x�s�w�C
+
