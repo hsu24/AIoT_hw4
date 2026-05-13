@@ -1,9 +1,9 @@
 import os
 import cv2
 import numpy as np
-import joblib
 from collections import defaultdict
 import mediapipe as mp
+import onnxruntime as ort
 from sklearn.metrics import classification_report
 
 mp_hands = mp.solutions.hands
@@ -32,17 +32,16 @@ def extract_landmarks(img, hands):
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.dirname(script_dir)
-    model_path = os.path.join(script_dir, 'rps_mp_model.pkl')
+    model_path = os.path.join(script_dir, 'rps_mp_model.onnx')
     test_dir = os.path.join(base_dir, 'dataset', 'test')
 
     if not os.path.exists(model_path):
         print(f"❌ 錯誤：找不到模型 '{model_path}'")
         return
 
-    print("⏳ 載入模型中...")
-    model_data = joblib.load(model_path)
-    clf = model_data['model']
-    CLASS_NAMES = model_data['class_names']
+    print("⏳ 載入 MediaPipe ONNX 模型中...")
+    session = ort.InferenceSession(model_path)
+    CLASS_NAMES = ['paper', 'rock', 'scissors']
     print(f"✅ 模型載入成功！類別：{CLASS_NAMES}")
 
     y_true = []
@@ -75,7 +74,11 @@ def main():
                     skipped += 1
                     continue
 
-                p_idx = clf.predict([features])[0]
+                features_tensor = features.reshape(1, -1).astype(np.float32)
+                input_name = session.get_inputs()[0].name
+                outputs = session.run(None, {input_name: features_tensor})
+                
+                p_idx = int(outputs[0][0])
                 pred_name = CLASS_NAMES[p_idx]
 
                 y_true.append(category)
@@ -90,7 +93,7 @@ def main():
                     per_class_correct[category] += 1
 
     print("\n" + "=" * 55)
-    print("📊 MediaPipe 模型測試結果")
+    print("📊 MediaPipe 模型測試結果 (ONNX Runtime)")
     print("=" * 55)
 
     if total > 0:

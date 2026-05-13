@@ -1,48 +1,43 @@
 import os
 import sys
 import cv2
+import numpy as np
 from collections import defaultdict
+from sklearn.metrics import classification_report
 
 try:
-    from ultralytics import YOLO
-    from sklearn.metrics import classification_report
+    import onnxruntime as ort
 except ImportError:
-    print("❌ 錯誤：缺少必要套件。")
+    print("❌ 錯誤：缺少 onnxruntime 套件。")
     print("   請執行以下指令安裝：")
-    print("   pip install ultralytics scikit-learn")
+    print("   pip install onnxruntime scikit-learn")
     sys.exit(1)
-
 
 # YOLO 分類模型的類別名稱（與訓練時的資料夾順序一致）
 CLASS_NAMES = {0: 'paper', 1: 'rock', 2: 'scissors'}
-
 
 def main():
     # 設定路徑
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.dirname(script_dir)
-    model_path = os.path.join(script_dir, 'rps_yolo_model.pt')
+    model_path = os.path.join(script_dir, 'rps_yolo_model.onnx')
     test_dir = os.path.join(base_dir, 'dataset', 'test')
 
     # 檢查模型
     if not os.path.exists(model_path):
-        print("❌ 錯誤：找不到 YOLO 模型 '{}'".format(model_path))
-        print("   請先執行 train/train_yolo.py 訓練模型。")
+        print("❌ 錯誤：找不到 YOLO ONNX 模型 '{}'".format(model_path))
         return
 
     if not os.path.exists(test_dir):
         print("❌ 錯誤：找不到測試資料集 '{}'".format(test_dir))
         return
 
-    # 載入 YOLO 模型
-    print("⏳ 載入 YOLO 模型中...")
-    model = YOLO(model_path)
+    # 載入 ONNX 模型
+    print("⏳ 載入 YOLO ONNX 模型中...")
+    session = ort.InferenceSession(model_path)
     print("✅ 模型載入成功！")
     print("   模型: {}".format(os.path.basename(model_path)))
-    
-    # 取得模型的類別對應
-    model_names = model.names
-    print("   類別: {}\n".format(model_names))
+    print("   類別: {}\n".format(CLASS_NAMES))
 
     # 統計
     y_true = []
@@ -72,16 +67,21 @@ def main():
                 continue
 
             img_path = os.path.join(category_path, filename)
-            
-            # 使用 YOLO 進行預測
-            results = model.predict(img_path, verbose=False)
-            if len(results) == 0:
+            img = cv2.imread(img_path)
+            if img is None:
                 continue
-                
-            # 分類任務的第一個預測結果
-            result = results[0]
-            p_idx = int(result.probs.top1)
-            pred_name = model_names[p_idx]
+
+            # YOLOv8 前處理
+            img_resized = cv2.resize(img, (224, 224))
+            img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+            img_chw = img_rgb.transpose((2, 0, 1))
+            img_tensor = np.expand_dims(img_chw, axis=0).astype(np.float32) / 255.0
+
+            input_name = session.get_inputs()[0].name
+            outputs = session.run(None, {input_name: img_tensor})[0]
+            
+            p_idx = int(np.argmax(outputs[0]))
+            pred_name = CLASS_NAMES[p_idx]
 
             y_true.append(category)
             y_pred.append(pred_name)
@@ -96,7 +96,7 @@ def main():
 
     # ========== 結果報告 ==========
     print("\n" + "=" * 55)
-    print("📊 YOLO 模型測試結果 (Ultralytics)")
+    print("📊 YOLO 模型測試結果 (ONNX Runtime)")
     print("=" * 55)
 
     if total > 0:
@@ -125,4 +125,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

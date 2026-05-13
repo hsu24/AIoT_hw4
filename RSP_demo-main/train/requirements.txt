@@ -2,7 +2,6 @@ scikit-learn
 opencv-python
 numpy
 joblib
-ultralytics
-torch
-torchvision
+onnxruntime
+skl2onnx
 mediapipe
